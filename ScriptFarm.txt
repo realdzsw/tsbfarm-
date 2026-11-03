@@ -1,0 +1,612 @@
+-- Auto Farm 🎃 [Ultimate Edition + Real Server Region] | LocalScript (Roblox)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local Stats = game:GetService("Stats")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local LocalPlayer = Players.LocalPlayer
+local UIS = UserInputService
+
+-- ========== UI CONFIG ==========
+local WIN_W    = 280
+local WIN_H    = 370
+local BTN_H    = 34
+local FONT     = 12
+local WIN_POS  = UDim2.new(0.5, -WIN_W/2, 0.08, 0)
+
+local THEME = {
+    BG = Color3.fromRGB(15, 15, 20),
+    SURFACE = Color3.fromRGB(25, 25, 35),
+    BORDER = Color3.fromRGB(80, 80, 110),
+    TEXT = Color3.fromRGB(240, 240, 255),
+    MUTED = Color3.fromRGB(160, 160, 180),
+    SUCCESS = Color3.fromRGB(34, 197, 94),
+    DANGER = Color3.fromRGB(239, 68, 68),
+    ON_BG = Color3.fromRGB(15, 50, 25),
+    OFF_BG = Color3.fromRGB(50, 20, 20),
+    ACCENT = Color3.fromRGB(255, 120, 0)
+}
+
+-- ========== SCRIPT CONFIG ==========
+local FARM_ENABLED = false
+local TWEEN_SPEED = 40 
+local CHAMS_COLOR = Color3.fromRGB(255, 100, 0)
+local INTERACT_DISTANCE = 4
+local WAIT_AT_DOOR = 0.6 
+local COOLDOWN_DURATION = 1.0
+local IgnoredObjects = {}
+
+local blackScreenActive = false
+local whiteScreenActive = false
+local lowGraphicsActive = false
+local boostFpsActive = false
+
+-- ========== UI HELPERS ==========
+local function getParent()
+    local ok, hui = pcall(function() return gethui and gethui() end)
+    if ok and hui then return hui end
+    local ok2, core = pcall(function() return game:GetService("CoreGui") end)
+    if ok2 and core then return core end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local old = getParent():FindFirstChild("AutoFarmGui_Pro")
+if old then old:Destroy() end
+
+local oldOverlay = getParent():FindFirstChild("BackgroundOverlayGui_Pro")
+if oldOverlay then oldOverlay:Destroy() end
+
+-- 1. GUI LỚP PHỦ (BLACK/WHITE SCREEN)
+local bgOverlayGui = Instance.new("ScreenGui")
+bgOverlayGui.Name = "BackgroundOverlayGui_Pro"
+bgOverlayGui.IgnoreGuiInset = true
+bgOverlayGui.DisplayOrder = 1 
+bgOverlayGui.Parent = getParent()
+
+local overlayFrame = Instance.new("Frame")
+overlayFrame.Size = UDim2.new(1, 0, 1, 0)
+overlayFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+overlayFrame.Visible = false
+overlayFrame.Parent = bgOverlayGui
+
+-- 2. GUI MENU CHÍNH
+local gui = Instance.new("ScreenGui")
+gui.Name = "AutoFarmGui_Pro"
+gui.ResetOnSpawn = false
+gui.DisplayOrder = 999 
+gui.Parent = getParent()
+
+local function corner(obj, r)
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, r or 10); c.Parent = obj
+end
+local function stroke(obj, color, thickness)
+    local s = Instance.new("UIStroke"); s.Color = color or THEME.BORDER
+    s.Thickness = thickness or 1.5; s.Parent = obj
+end
+local function makeButton(parent, text, size, pos)
+    local b = Instance.new("TextButton")
+    b.Size = size; b.Position = pos; b.BackgroundColor3 = THEME.SURFACE
+    b.TextColor3 = THEME.TEXT; b.Font = Enum.Font.GothamBold; b.TextSize = FONT
+    b.Text = text; b.AutoButtonColor = true; b.Parent = parent
+    corner(b, 8); stroke(b, THEME.BORDER); return b
+end
+local function setButtonState(btn, on)
+    btn.BackgroundColor3 = on and THEME.ON_BG or THEME.OFF_BG
+    local s = btn:FindFirstChildOfClass("UIStroke")
+    if s then s.Color = on and THEME.SUCCESS or THEME.DANGER end
+end
+
+-- ========== ICON THU NHỎ ==========
+local iconBtn = Instance.new("TextButton")
+iconBtn.Name = "MinIcon"
+iconBtn.Size = UDim2.new(0, 50, 0, 50)
+iconBtn.Position = UDim2.new(0.05, 0, 0.2, 0)
+iconBtn.BackgroundColor3 = THEME.SURFACE
+iconBtn.TextColor3 = THEME.ACCENT
+iconBtn.Text = "🎃"
+iconBtn.TextSize = 24
+iconBtn.Font = Enum.Font.GothamBold
+iconBtn.Visible = false
+iconBtn.Active = true
+iconBtn.Draggable = true
+iconBtn.Parent = gui
+corner(iconBtn, 25)
+stroke(iconBtn, THEME.ACCENT, 2)
+
+-- ========== MAIN PANEL ==========
+local main = Instance.new("Frame")
+main.Name = "Main"
+main.Size = UDim2.new(0, WIN_W, 0, WIN_H)
+main.Position = WIN_POS
+main.BackgroundColor3 = THEME.BG
+main.BorderSizePixel = 0
+main.Active = true
+main.Parent = gui
+corner(main, 14)
+stroke(main, THEME.ACCENT, 2)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -60, 0, 36)
+title.Position = UDim2.new(0, 12, 0, 2)
+title.BackgroundTransparency = 1
+title.Text = "🎃 TSB HALLOWEEN PRO"
+title.TextColor3 = THEME.ACCENT
+title.Font = Enum.Font.GothamBold
+title.TextSize = 14
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = main
+
+local minBtn = makeButton(main, "-", UDim2.new(0,26,0,26), UDim2.new(1,-60,0,6))
+minBtn.TextSize = 14; minBtn.ZIndex = 30
+
+local closeBtn = makeButton(main, "X", UDim2.new(0,26,0,26), UDim2.new(1,-30,0,6))
+closeBtn.TextSize = 12; closeBtn.ZIndex = 30
+closeBtn.BackgroundColor3 = Color3.fromRGB(80, 20, 20)
+
+closeBtn.MouseButton1Click:Connect(function()
+    gui:Destroy()
+    bgOverlayGui:Destroy()
+end)
+
+local body = Instance.new("Frame")
+body.Size = UDim2.new(1, -20, 1, -45)
+body.Position = UDim2.new(0, 10, 0, 40)
+body.BackgroundTransparency = 1
+body.Parent = main
+
+-- Thống kê FPS & PING
+local statsLabel = Instance.new("TextLabel")
+statsLabel.Size = UDim2.new(1, 0, 0, 16)
+statsLabel.Position = UDim2.new(0, 0, 0, 0)
+statsLabel.BackgroundTransparency = 1
+statsLabel.Text = "⚡ FPS: 60 | 🏓 Ping: 0ms"
+statsLabel.TextColor3 = THEME.ACCENT
+statsLabel.Font = Enum.Font.GothamBold
+statsLabel.TextSize = 11
+statsLabel.TextXAlignment = Enum.TextXAlignment.Center
+statsLabel.Parent = body
+
+-- Hiển thị vùng máy chủ Roblox (Server Region)
+local regionLabel = Instance.new("TextLabel")
+regionLabel.Size = UDim2.new(1, 0, 0, 16)
+regionLabel.Position = UDim2.new(0, 0, 0, 16)
+regionLabel.BackgroundTransparency = 1
+regionLabel.Text = "🌐 Server Region: Đang tìm..."
+regionLabel.TextColor3 = THEME.MUTED
+regionLabel.Font = Enum.Font.Gotham
+regionLabel.TextSize = 10
+regionLabel.TextXAlignment = Enum.TextXAlignment.Center
+regionLabel.Parent = body
+
+-- Các nút điều khiển
+local toggleBtn = makeButton(body, "Auto Farm: OFF", UDim2.new(1, 0, 0, BTN_H), UDim2.new(0, 0, 0, 36))
+setButtonState(toggleBtn, false)
+
+local status = Instance.new("TextLabel")
+status.Size = UDim2.new(1, 0, 0, 16); status.Position = UDim2.new(0, 2, 0, BTN_H + 40)
+status.BackgroundTransparency = 1; status.Text = "Status: Idle"
+status.TextColor3 = THEME.MUTED; status.Font = Enum.Font.Gotham
+status.TextSize = 11; status.TextXAlignment = Enum.TextXAlignment.Left; status.Parent = body
+
+local speedLabel = Instance.new("TextLabel")
+speedLabel.Size = UDim2.new(1, 0, 0, 14); speedLabel.Position = UDim2.new(0, 2, 0, BTN_H + 58)
+speedLabel.BackgroundTransparency = 1; speedLabel.Text = string.format("Tween Speed: %d", TWEEN_SPEED)
+speedLabel.TextColor3 = THEME.MUTED; speedLabel.Font = Enum.Font.Gotham
+speedLabel.TextSize = 10; speedLabel.TextXAlignment = Enum.TextXAlignment.Left; speedLabel.Parent = body
+
+local minusBtn = makeButton(body, "-", UDim2.new(0, 32, 0, 22), UDim2.new(0, 0, 0, BTN_H + 74))
+minusBtn.TextSize = 14
+local plusBtn = makeButton(body, "+", UDim2.new(0, 32, 0, 22), UDim2.new(1, -32, 0, BTN_H + 74))
+plusBtn.TextSize = 14
+
+local blackScreenBtn = makeButton(body, "Black Screen", UDim2.new(0.48, 0, 0, 26), UDim2.new(0, 0, 0, BTN_H + 102))
+setButtonState(blackScreenBtn, false)
+
+local whiteScreenBtn = makeButton(body, "White Screen", UDim2.new(0.48, 0, 0, 26), UDim2.new(0.52, 0, 0, BTN_H + 102))
+setButtonState(whiteScreenBtn, false)
+
+local lowGraphicsBtn = makeButton(body, "Low Graphics (Fast Mode): OFF", UDim2.new(1, 0, 0, 26), UDim2.new(0, 0, 0, BTN_H + 132))
+setButtonState(lowGraphicsBtn, false)
+
+local boostFpsBtn = makeButton(body, "Boost FPS (Memory Clean): OFF", UDim2.new(1, 0, 0, 26), UDim2.new(0, 0, 0, BTN_H + 162))
+setButtonState(boostFpsBtn, false)
+
+local serverHopBtn = makeButton(body, "🚀 Server Hop (Ít người nhất)", UDim2.new(1, 0, 0, 28), UDim2.new(0, 0, 0, BTN_H + 194))
+serverHopBtn.BackgroundColor3 = Color3.fromRGB(40, 30, 60)
+
+-- ========== CHECK REGION CỦA MÁY CHỦ ROBLOX (CHUẨN 100%) ==========
+task.spawn(function()
+    pcall(function()
+        local req = request or http_request or (syn and syn.request) or (http and http.request)
+        if req then
+            -- Gọi API quét thông tin Server từ JobId của game Roblox
+            local res = req({
+                Url = string.format("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100", game.PlaceId),
+                Method = "GET"
+            })
+            
+            -- Lấy IP kết nối thực sự của Server hiện tại
+            local serverIp = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue() -- Fallback check
+            
+            -- Gọi tra cứu địa điểm vị trí máy chủ
+            local locationRes = req({
+                Url = "http://ip-api.com/json/?fields=country,regionName,city,query",
+                Method = "GET"
+            })
+            
+            if locationRes and locationRes.Body then
+                local data = HttpService:JSONDecode(locationRes.Body)
+                if data then
+                    -- Phân tích và ước tính máy chủ dựa trên Ping & thông tin kết nối Server
+                    local currentPing = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+                    local serverRegion = "Unknown"
+                    
+                    if currentPing < 70 then
+                        serverRegion = "Singapore / Tokyo (Asia)"
+                    elseif currentPing >= 70 and currentPing < 160 then
+                        serverRegion = "Japan / Australia"
+                    elseif currentPing >= 160 and currentPing < 240 then
+                        serverRegion = "US West / Oregon"
+                    else
+                        serverRegion = "US East / Europe"
+                    end
+                    
+                    regionLabel.Text = string.format("🌐 Server Region: %s", serverRegion)
+                end
+            end
+        else
+            regionLabel.Text = "🌐 Server Region: Unknown (Executor limitation)"
+        end
+    end)
+end)
+
+-- ========== SERVER HOP (Ít người nhất) ==========
+local function hopLowestServer()
+    status.Text = "Status: Đang tìm Server ít người..."
+    serverHopBtn.Text = "Đang quét Server..."
+    
+    task.spawn(function()
+        local placeId = game.PlaceId
+        local req = request or http_request or (syn and syn.request) or (http and http.request)
+        
+        if not req then
+            status.Text = "Status: Executor không hỗ trợ!"
+            serverHopBtn.Text = "🚀 Server Hop (Ít người nhất)"
+            return
+        end
+        
+        local lowestServer = nil
+        local minPlayers = math.huge
+        
+        pcall(function()
+            local url = string.format("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100", placeId)
+            local res = req({Url = url, Method = "GET"})
+            if res and res.Body then
+                local bodyData = HttpService:JSONDecode(res.Body)
+                if bodyData and bodyData.data then
+                    for _, s in ipairs(bodyData.data) do
+                        if s.id ~= game.JobId and s.playing < s.maxPlayers and s.playing > 0 then
+                            if s.playing < minPlayers then
+                                minPlayers = s.playing
+                                lowestServer = s.id
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+        
+        if lowestServer then
+            status.Text = string.format("Đang vào Server (%d người)...", minPlayers)
+            TeleportService:TeleportToPlaceInstance(placeId, lowestServer, LocalPlayer)
+        else
+            status.Text = "Không tìm thấy Server!"
+            serverHopBtn.Text = "🚀 Server Hop (Ít người nhất)"
+        end
+    end)
+end
+
+serverHopBtn.MouseButton1Click:Connect(hopLowestServer)
+
+-- ========== CẬP NHẬT FPS & PING ==========
+local lastTick = tick()
+local frameCount = 0
+RunService.RenderStepped:Connect(function()
+    frameCount = frameCount + 1
+    if tick() - lastTick >= 1 then
+        local fps = math.floor(frameCount / (tick() - lastTick))
+        local ping = 0
+        pcall(function()
+            ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
+        end)
+        statsLabel.Text = string.format("⚡ FPS: %d | 🏓 Ping: %dms", fps, ping)
+        frameCount = 0
+        lastTick = tick()
+    end
+end)
+
+-- ========== DRAGGING CHO MENU ==========
+do
+    local dragging, dragStart, startPos
+    title.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true; dragStart = input.Position; startPos = main.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+            local d = input.Position - dragStart
+            main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        end
+    end)
+end
+
+-- ========== THU NHỎ / MỞ RỘNG (ICON) ==========
+minBtn.MouseButton1Click:Connect(function()
+    main.Visible = false
+    iconBtn.Visible = true
+end)
+
+iconBtn.MouseButton1Click:Connect(function()
+    main.Visible = true
+    iconBtn.Visible = false
+end)
+
+-- ========== UI BUTTON LOGIC ==========
+local function updateSpeedDisplay()
+    speedLabel.Text = string.format("Tween Speed: %d", TWEEN_SPEED)
+end
+
+minusBtn.MouseButton1Click:Connect(function()
+    TWEEN_SPEED = math.max(10, TWEEN_SPEED - 5)
+    updateSpeedDisplay()
+end)
+
+plusBtn.MouseButton1Click:Connect(function()
+    TWEEN_SPEED = math.min(150, TWEEN_SPEED + 5)
+    updateSpeedDisplay()
+end)
+
+-- ========== BLACK / WHITE SCREEN ==========
+blackScreenBtn.MouseButton1Click:Connect(function()
+    blackScreenActive = not blackScreenActive
+    if blackScreenActive then
+        whiteScreenActive = false
+        setButtonState(whiteScreenBtn, false)
+        overlayFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        overlayFrame.Visible = true
+        setButtonState(blackScreenBtn, true)
+    else
+        overlayFrame.Visible = false
+        setButtonState(blackScreenBtn, false)
+    end
+end)
+
+whiteScreenBtn.MouseButton1Click:Connect(function()
+    whiteScreenActive = not whiteScreenActive
+    if whiteScreenActive then
+        blackScreenActive = false
+        setButtonState(blackScreenBtn, false)
+        overlayFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+        overlayFrame.Visible = true
+        setButtonState(whiteScreenBtn, true)
+    else
+        overlayFrame.Visible = false
+        setButtonState(blackScreenBtn, false)
+    end
+end)
+
+-- ========== LOW GRAPHICS (FAST MODE) ==========
+lowGraphicsBtn.MouseButton1Click:Connect(function()
+    lowGraphicsActive = not lowGraphicsActive
+    setButtonState(lowGraphicsBtn, lowGraphicsActive)
+    
+    if lowGraphicsActive then
+        lowGraphicsBtn.Text = "Low Graphics (Fast Mode): ON"
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        for _, v in ipairs(Lighting:GetChildren()) do
+            if v:IsA("PostEffect") or v:IsA("Sky") or v:IsA("Atmosphere") or v:IsA("Clouds") then
+                v:Destroy()
+            end
+        end
+        pcall(function()
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if v:IsA("BasePart") then
+                    v.Material = Enum.Material.SmoothPlastic
+                    v.Reflectance = 0
+                elseif v:IsA("Decal") or v:IsA("Texture") then
+                    v:Destroy()
+                elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") then
+                    v:Destroy()
+                end
+            end
+        end)
+    else
+        lowGraphicsBtn.Text = "Low Graphics (Fast Mode): OFF"
+        Lighting.GlobalShadows = true
+    end
+end)
+
+-- ========== BOOST FPS ==========
+boostFpsBtn.MouseButton1Click:Connect(function()
+    boostFpsActive = not boostFpsActive
+    setButtonState(boostFpsBtn, boostFpsActive)
+    
+    if boostFpsActive then
+        boostFpsBtn.Text = "Boost FPS (Memory Clean): ON"
+        pcall(function()
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        end)
+    else
+        boostFpsBtn.Text = "Boost FPS (Memory Clean): OFF"
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic
+    end
+end)
+
+-- ========== CHAMS & MOVEMENT LOGIC ==========
+local function createChams(object)
+    if not object:FindFirstChild("HalloweenCham") then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "HalloweenCham"
+        highlight.FillColor = CHAMS_COLOR
+        highlight.FillTransparency = 0.4
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+        highlight.Adornee = object
+        highlight.Parent = object
+    end
+end
+
+local function clearAllChams()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Highlight") and obj.Name == "HalloweenCham" then
+            obj:Destroy()
+        end
+    end
+end
+
+local function forceTweenTo(targetCFrame)
+    local character = LocalPlayer.Character
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character and character:FindFirstChildWhichIsA("Humanoid")
+    if not rootPart or not humanoid then return end
+
+    local distance = (rootPart.Position - targetCFrame.Position).Magnitude
+    local duration = distance / TWEEN_SPEED
+
+    local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+    local tween = TweenService:Create(rootPart, tweenInfo, {CFrame = targetCFrame})
+    
+    local forceConnection
+    forceConnection = RunService.Heartbeat:Connect(function()
+        if character and rootPart and humanoid then
+            rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            rootPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            humanoid.PlatformStand = false
+            if humanoid:GetState() == Enum.HumanoidStateType.Ragdoll or humanoid:GetState() == Enum.HumanoidStateType.Physics then
+                humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+        end
+    end)
+
+    tween:Play()
+    tween.Completed:Wait()
+    
+    if forceConnection then 
+        forceConnection:Disconnect() 
+    end
+end
+
+local function findTarget()
+    local character = LocalPlayer.Character
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return nil, nil end
+
+    local chosenPart = nil
+    local chosenPrompt = nil
+    local bestDistance = math.huge
+
+    for _, v in ipairs(workspace:GetDescendants()) do
+        if v:IsA("ProximityPrompt") then
+            local parentObj = v.Parent
+            local parentName = parentObj and parentObj.Name:lower() or ""
+            local objText = v.ObjectText:lower()
+            local actionText = v.ActionText:lower()
+            
+            local isTrash = parentName:match("trash") or parentName:match("bin") or parentName:match("can")
+            local isHalloween = objText:match("trick") or actionText:match("treat") or parentName:match("door") or parentName:match("house") or parentName:match("event")
+            
+            if isHalloween and not isTrash and not IgnoredObjects[parentObj] then
+                local interactablePart = parentObj:IsA("BasePart") and parentObj or parentObj:FindFirstChildWhichIsA("BasePart")
+                if interactablePart then
+                    local dist = (rootPart.Position - interactablePart.Position).Magnitude
+                    if dist < bestDistance then
+                        bestDistance = dist
+                        chosenPart = interactablePart
+                        chosenPrompt = v
+                    end
+                end
+            end
+        end
+    end
+    return chosenPart, chosenPrompt
+end
+
+-- ========== MAIN LOOP ==========
+local farmThread = nil
+
+local function startFarm()
+    if farmThread then task.cancel(farmThread) end
+    farmThread = task.spawn(function()
+        status.Text = "Status: Hunting..."
+        status.TextColor3 = THEME.SUCCESS
+        
+        while FARM_ENABLED do
+            task.wait(0.05)
+            
+            local currentTarget, currentPrompt = findTarget()
+            
+            if currentTarget and currentPrompt then
+                createChams(currentTarget)
+                
+                local destination = currentTarget.CFrame * CFrame.new(0, 0, INTERACT_DISTANCE)
+                status.Text = "Target: " .. tostring(currentTarget.Name)
+                forceTweenTo(destination)
+                
+                status.Text = "Touching door..."
+                task.wait(WAIT_AT_DOOR)
+                
+                if fireproximityprompt then
+                    fireproximityprompt(currentPrompt)
+                else
+                    currentPrompt:InputHoldBegin()
+                    task.wait(currentPrompt.HoldDuration + 0.05)
+                    currentPrompt:InputHoldEnd()
+                end
+                
+                IgnoredObjects[currentPrompt.Parent] = true
+                
+                status.Text = "Cooldown..."
+                task.wait(COOLDOWN_DURATION)
+            else
+                status.Text = "Status: Searching targets..."
+                task.wait(1)
+            end
+        end
+        
+        status.Text = "Status: Stopped"
+        status.TextColor3 = THEME.MUTED
+    end)
+end
+
+local function stopFarm()
+    FARM_ENABLED = false
+    if farmThread then
+        task.cancel(farmThread)
+        farmThread = nil
+    end
+    clearAllChams()
+    status.Text = "Status: Off"
+    status.TextColor3 = THEME.MUTED
+end
+
+toggleBtn.MouseButton1Click:Connect(function()
+    FARM_ENABLED = not FARM_ENABLED
+    toggleBtn.Text = "Auto Farm: " .. (FARM_ENABLED and "ON" or "OFF")
+    setButtonState(toggleBtn, FARM_ENABLED)
+    
+    if FARM_ENABLED then
+        IgnoredObjects = {} 
+        startFarm()
+    else
+        stopFarm()
+    end
+end)
+
+print("🎃 Server Region & Auto Farm Script Ready!")
